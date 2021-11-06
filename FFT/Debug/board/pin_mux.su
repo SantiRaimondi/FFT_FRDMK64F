@@ -1,0 +1,5 @@
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_clock.h:668:20:CLOCK_EnableClock	24	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_port.h:374:20:PORT_SetPinMux	24	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_port.h:443:20:PORT_SetPinInterruptConfig	24	static
+../board/pin_mux.c:31:6:BOARD_InitBootPins	8	static
+../board/pin_mux.c:62:6:BOARD_InitPins	32	static

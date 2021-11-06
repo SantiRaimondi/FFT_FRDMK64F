@@ -1,0 +1,14 @@
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\CMSIS/core_cm4.h:1679:22:__NVIC_EnableIRQ	16	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_common_arm.h:488:24:EnableIRQ	24	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_pit.h:159:20:PIT_EnableInterrupts	24	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_pit.h:246:20:PIT_SetTimerPeriod	24	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_pit.h:288:20:PIT_StartTimer	16	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_adc16.h:367:20:ADC16_EnableHardwareTrigger	16	static
+C:\Users\santi\Desktop\Datardos\Facultad\Segundo semestre Quinto\DSP\workspace\FFT\drivers/fsl_dac.h:187:20:DAC_Enable	16	static
+../board/peripherals.c:101:13:GPIOA_init	8	static
+../board/peripherals.c:146:13:PIT_init	8	static
+../board/peripherals.c:184:13:GPIOC_init	8	static
+../board/peripherals.c:260:13:ADC0_init	8	static
+../board/peripherals.c:303:13:DAC0_init	8	static
+../board/peripherals.c:317:6:BOARD_InitPeripherals	8	static
+../board/peripherals.c:330:6:BOARD_InitBootPeripherals	8	static
