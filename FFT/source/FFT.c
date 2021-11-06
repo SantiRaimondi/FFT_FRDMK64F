@@ -314,6 +314,32 @@ int main(void)
 		PRINTF(" REINICIE LA PLACA E INTENTE NUEVAMENTE. \r\n");
 		while (1){}	
 	}
+	else
+	{
+		PRINTF("Inicializacion correcta, su seleccion: %d", seleccion);
+	}
+
+	/* 	Ventanas de Hannig para suavizar el calculo de la FFT.
+		La forumla del calculo la sacamos de internet. 
+	*/
+	static q15_t hanning_window_512[FFT_SAMPLES_512];
+	static q15_t window_input_512[FFT_SAMPLES_512];
+
+	static q15_t hanning_window_1024[FFT_SAMPLES_1024];
+	static q15_t window_input_1024[FFT_SAMPLES_1024];
+
+	static q15_t hanning_window_2048[FFT_SAMPLES_2048];
+	static q15_t window_input_2048[FFT_SAMPLES_2048];
+
+	for(int i=0; i<FFT_SAMPLES_512; i++)
+		hanning_window_512[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_512)));
+				
+	for(int i=0; i<FFT_SAMPLES_1024; i++) 
+		hanning_window_1024[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_1024)));
+				
+	for(int i=0; i<FFT_SAMPLES_2048; i++) 
+		hanning_window_2048[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_2048)));
+				
 
 	while (1)
     {
@@ -355,7 +381,9 @@ int main(void)
 			{
 				if (fft_is_active)
 				{
-					arm_rfft_q15(&fft_512, input_buffer_512, output_buffer_512);
+					/* Se aplica el filtro de ventana a la entrada y se computa la FFT sobre la señal filtrada */
+					arm_mult_q15(hanning_window_512, input_buffer_512, window_input_512, FFT_SAMPLES_512);
+					arm_rfft_q15(&fft_512, window_input_512, output_buffer_512);
 
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_512[i] <<= upscale_bits;
@@ -365,20 +393,22 @@ int main(void)
 			{
 				if (fft_is_active)
 				{
-					arm_rfft_q15(&fft_1024, input_buffer_1024, output_buffer_1024);
+					arm_mult_q15(hanning_window_1024, input_buffer_1024, window_input_1024, FFT_SAMPLES_1024);
+					arm_rfft_q15(&fft_1024, window_input_1024, output_buffer_1024);
 
 					for(uint16_t i = 0; i < buffer_limit; i++)
-						output_buffer_512[i] <<= upscale_bits;
+						output_buffer_1024[i] <<= upscale_bits;
 				}
 			}
 			if(seleccion == 3)
 			{
 				if (fft_is_active)
 				{
-					arm_rfft_q15(&fft_2048, input_buffer_2048, output_buffer_2048);
+					arm_mult_q15(hanning_window_2048, input_buffer_2048, window_input_2048, FFT_SAMPLES_2048);
+					arm_rfft_q15(&fft_2048, window_input_2048, output_buffer_2048);
 
 					for(uint16_t i = 0; i < buffer_limit; i++)
-						output_buffer_512[i] <<= upscale_bits;
+						output_buffer_2048[i] <<= upscale_bits;
 				}
 			}
 	
