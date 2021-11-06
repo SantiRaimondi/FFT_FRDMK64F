@@ -43,8 +43,8 @@
 #define FFT_SAMPLES_512  (uint32_t) 512
 #define FFT_SAMPLES_1024 (uint32_t) 1024
 #define FFT_SAMPLES_2048 (uint32_t) 2048
-#define I_FFT_FLAG_R 	 (uint32_t) 0
-#define BIT_REVERSE_FLAG (uint32_t) 0
+#define I_FFT_FLAG_R 	 (uint32_t) 0		/* Flag que indica que se hara la Forward FFT*/
+#define BIT_REVERSE_FLAG (uint32_t) 0		/* Flag que indica que no se invertira el orden de salida de los bits de la FFT */
 
 #define CHANNEL_GROUP 0U
 #define DC_OFFSET (uint16_t) 32767	/* Offset de DC que trae la señal. */
@@ -56,10 +56,10 @@
  * Variables
  ******************************************************************************/
 /* Variables para el hardware */
-uint8_t counter = 0;			/* Contador de interrupciones de cambio de velocidad */
-bool fft_is_active = true;		/* Bandera que señala si se esta aplicando la FFT a la señal de entrada */
 q15_t input_value_fixed = 0;	/* Valor en formato q15 leido por el ADC */
 bool adc_finished = false;		/* Bandera para avisar que hay una nueva conversion de ADC */
+volatile uint8_t counter = 0;			/* Contador de interrupciones de cambio de velocidad */
+volatile bool fft_is_active = true;		/* Bandera que señala si se esta aplicando la FFT a la señal de entrada */
 
 /* Buffers de entrada y salida para cada FFT */
 q15_t input_buffer_512	[FFT_SAMPLES_512];
@@ -70,11 +70,12 @@ q15_t input_buffer_2048	[FFT_SAMPLES_2048];
 q15_t output_buffer_2048[FFT_SAMPLES_2048];
 
 /* Punteros que se usan para recorrer los buffers */
-q15_t *input_buffer_ptr, *output_buffer_ptr;
+volatile q15_t *input_buffer_ptr, *output_buffer_ptr;
+q15_t *input_start_ptr, *output_start_ptr;	/* Siempre señalan el incio del buffer */
 
 /* Variables para la logica de los buffers */
-uint16_t samples_counter = 0;	/* Variable  que se usa para contar la cantidad de muestras tomadas */
-uint16_t buffer_limit 	= 0;	/* Limite que se asignara al momento de la seleccion de la cantidad de puntos de la FFT */
+volatile uint16_t samples_counter = 0;	/* Variable  que se usa para contar la cantidad de muestras tomadas */
+uint16_t buffer_limit 	= 0;			/* Limite que se asignara al momento de la seleccion de la cantidad de puntos de la FFT */
 bool buffer_is_full = false;	/* Bandera que indica si se lleno el buffer de muestras de entradas para computar la FFT */
 
 /* Instancias de la estructura de configuracion para las distintas FFT */
@@ -98,8 +99,22 @@ void GPIOC_IRQHANDLER(void)
 
 	/* Place your interrupt code here */
 
-	fft_is_active = !fft_is_active;	/* Se desactiva el calculo de la fft. */
+	if (fft_is_active)
+	{
+		/* 	Se desactiva el calculo de la fft y se dejan listos los punteros en la posicion 
+			inicial del buff. correspondiente para que cuando se active nuevamente los buffers 
+			se llenen con muestras consecutivas.
+		*/
 
+		fft_is_active = false;
+
+		input_buffer_ptr  = input_start_ptr;
+		output_buffer_ptr = output_start_ptr;
+		samples_counter = 0;
+	}
+	else
+		fft_is_active = true;
+	
 	/* Clear pin flags */
 	GPIO_PortClearInterruptFlags(GPIOC, pin_flags);
 
@@ -213,10 +228,6 @@ void ADC0_IRQHANDLER(void)
 	adc_finished = true;	
 	input_value_fixed =  (q15_t)(result_value - DC_OFFSET);	/* Se quita el offset de continua sobre el que viene montada la señal */
 
-	/* Se guarda el valor medido por ADC en formato fraccional. */
-	/* CAMBIAR ESTA PARTE */
-	DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((input_value_fixed + DC_OFFSET)>>4));	/* Se actualiza el valor del DAC */
-
 	/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F
 	 Store immediate overlapping exception return operation might vector to incorrect interrupt. */
     SDK_ISR_EXIT_BARRIER;
@@ -254,6 +265,8 @@ int main(void)
 	{
 		input_buffer_ptr = &input_buffer_512[0];
 		output_buffer_ptr = &output_buffer_512[0];
+		input_start_ptr = &input_buffer_512[0];
+		output_start_ptr = &output_buffer_512[0];
 		buffer_limit = FFT_SAMPLES_512;
 		upscale_bits = 8;
 		if (arm_rfft_init_q15(&fft_512, FFT_SAMPLES_512, I_FFT_FLAG_R, BIT_REVERSE_FLAG) != ARM_MATH_SUCCESS)
@@ -266,6 +279,8 @@ int main(void)
 	{
 		input_buffer_ptr = &input_buffer_1024[0];
 		output_buffer_ptr = &output_buffer_1024[0];
+		input_start_ptr = &input_buffer_1024[0];
+		output_start_ptr = &output_buffer_1024[0];
 		buffer_limit = FFT_SAMPLES_1024;
 		upscale_bits = 9;
 		if (arm_rfft_init_q15(&fft_1024, FFT_SAMPLES_1024, I_FFT_FLAG_R, BIT_REVERSE_FLAG) != ARM_MATH_SUCCESS)
@@ -278,6 +293,8 @@ int main(void)
 	{
 		input_buffer_ptr = &input_buffer_2048[0];
 		output_buffer_ptr = &output_buffer_2048[0];
+		input_start_ptr = &input_buffer_2048[0];
+		output_start_ptr = &output_buffer_2048[0];
 		buffer_limit = FFT_SAMPLES_2048;
 		upscale_bits = 10;
 		if (arm_rfft_init_q15(&fft_2048, FFT_SAMPLES_2048, I_FFT_FLAG_R, BIT_REVERSE_FLAG)!= ARM_MATH_SUCCESS)
@@ -298,9 +315,20 @@ int main(void)
     {
 		if (adc_finished && !buffer_is_full)
 		{
+			adc_finished = false;
+
 			*input_buffer_ptr = input_value_fixed;	/* Se guarda el nuevo valor y se desplaza el puntero */
 			input_buffer_ptr ++;
 
+			if (fft_is_active)
+			{
+				/* Se actualiza el valor del DAC con lo que haya en el buffer de salida de la FFT */
+				DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((*output_buffer_ptr + DC_OFFSET)>>4));	
+				output_buffer_ptr ++;
+			}
+			else
+				DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((input_value_fixed + DC_OFFSET)>>4));
+			
 
 			samples_counter ++;
 			if(samples_counter >= buffer_limit)
@@ -309,7 +337,6 @@ int main(void)
 				buffer_is_full = true;	/* Se avisa que se lleno el buffer */
 			}
 
-			adc_finished = false;
 		}
 
 		if(buffer_is_full)
@@ -331,7 +358,6 @@ int main(void)
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_512[i] <<= upscale_bits;
 				}
-
 
 				input_buffer_ptr  = &input_buffer_512[0];
 				output_buffer_ptr = &output_buffer_512[0];
@@ -364,7 +390,6 @@ int main(void)
 			}
 
 			EnableGlobalIRQ(primask_value);	/* Activo las interr. nuevamente */
-
 		}
 
 		/* TODO: Hacer la transmision de datos */
