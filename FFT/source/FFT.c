@@ -45,12 +45,11 @@
 #define FFT_SAMPLES_2048 (uint32_t) 2048
 #define I_FFT_FLAG_R 	 (uint32_t) 0		/* Flag que indica que se hara la Forward FFT*/
 #define BIT_REVERSE_FLAG (uint32_t) 1		/* Flag que indica que no se invertira el orden de salida de los bits de la FFT */
+//#define WINDOW_ENABLE 			/* Flag que activa la aplicacion del filtro de ventana de Hanning*/
 
 #define CHANNEL_GROUP 0U
 #define DC_OFFSET (uint16_t) 32767	/* Offset de DC que trae la señal. */
 #define DAC_BUFFER_INDEX 0U			/* Como no se utiliza el buffer, siempre es 0 este valor */
-
-#define __DEBUGG (bool) false	/* Variable de deuggeo */
 
 /*******************************************************************************
  * Variables
@@ -101,8 +100,8 @@ void GPIOC_IRQHANDLER(void)
 
 	if (fft_is_active)
 	{
-		/* 	Se desactiva el calculo de la FFT y se dejan listos los punteros en la posicion 
-			inicial del buff. correspondiente, para que cuando se active nuevamente los buffers 
+		/* 	Se desactiva el calculo de la FFT y se dejan listos los punteros en la posicion
+			inicial del buff. correspondiente, para que cuando se active nuevamente los buffers
 			se llenen con muestras consecutivas.
 		*/
 
@@ -118,7 +117,7 @@ void GPIOC_IRQHANDLER(void)
 		samples_counter = 0;
 		buffer_is_full = false;
 	}
-		
+
 	/* Clear pin flags */
 	GPIO_PortClearInterruptFlags(GPIOC, pin_flags);
 
@@ -320,26 +319,28 @@ int main(void)
 	}
 
 	/* 	Ventanas de Hannig para suavizar el calculo de la FFT.
-		La forumla del calculo la sacamos de internet. 
+		La forumla del calculo la sacamos de internet.
 	*/
-	static q15_t hanning_window_512[FFT_SAMPLES_512];
-	static q15_t window_input_512[FFT_SAMPLES_512];
 
-	static q15_t hanning_window_1024[FFT_SAMPLES_1024];
-	static q15_t window_input_1024[FFT_SAMPLES_1024];
+	#ifdef WINDOW_ENABLE
+		static q15_t hanning_window_512[FFT_SAMPLES_512];
+		static q15_t window_input_512[FFT_SAMPLES_512];
 
-	static q15_t hanning_window_2048[FFT_SAMPLES_2048];
-	static q15_t window_input_2048[FFT_SAMPLES_2048];
+		static q15_t hanning_window_1024[FFT_SAMPLES_1024];
+		static q15_t window_input_1024[FFT_SAMPLES_1024];
 
-	for(int i=0; i<FFT_SAMPLES_512; i++)
-		hanning_window_512[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_512)));
-				
-	for(int i=0; i<FFT_SAMPLES_1024; i++) 
-		hanning_window_1024[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_1024)));
-				
-	for(int i=0; i<FFT_SAMPLES_2048; i++) 
-		hanning_window_2048[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_2048)));
-				
+		static q15_t hanning_window_2048[FFT_SAMPLES_2048];
+		static q15_t window_input_2048[FFT_SAMPLES_2048];
+
+		for(int i=0; i<FFT_SAMPLES_512; i++)
+			hanning_window_512[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_512)));
+
+		for(int i=0; i<FFT_SAMPLES_1024; i++)
+			hanning_window_1024[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_1024)));
+
+		for(int i=0; i<FFT_SAMPLES_2048; i++)
+			hanning_window_2048[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / FFT_SAMPLES_2048)));
+	#endif
 
 	while (1)
     {
@@ -353,12 +354,12 @@ int main(void)
 			if (fft_is_active)
 			{
 				/* Se actualiza el valor del DAC con lo que haya en el buffer de salida de la FFT */
-				DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((*output_buffer_ptr + DC_OFFSET)>>4));	
+				DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((*output_buffer_ptr + DC_OFFSET)>>4));
 				output_buffer_ptr ++;
 			}
 			else
 				DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((input_value_fixed + DC_OFFSET)>>4));
-			
+
 			samples_counter ++;
 			if(samples_counter >= buffer_limit)
 			{
@@ -381,9 +382,13 @@ int main(void)
 			{
 				if (fft_is_active)
 				{
-					/* Se aplica el filtro de ventana a la entrada y se computa la FFT sobre la señal filtrada */
-					arm_mult_q15(hanning_window_512, input_buffer_512, window_input_512, FFT_SAMPLES_512);
-					arm_rfft_q15(&fft_512, window_input_512, output_buffer_512);
+					/* Si esta activado, se aplica el filtro de ventana a la entrada y se computa la FFT sobre la señal filtrada. Si no se computa la FFT sobre la señal de entrada */
+					#ifdef WINDOW_ENABLE
+						arm_mult_q15(hanning_window_512, input_buffer_512, window_input_512, FFT_SAMPLES_512);
+						arm_rfft_q15(&fft_512, window_input_512, output_buffer_512);
+					#else
+						arm_rfft_q15(&fft_512, input_buffer_512, output_buffer_512);
+					#endif
 
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_512[i] <<= upscale_bits;
@@ -393,8 +398,13 @@ int main(void)
 			{
 				if (fft_is_active)
 				{
-					arm_mult_q15(hanning_window_1024, input_buffer_1024, window_input_1024, FFT_SAMPLES_1024);
-					arm_rfft_q15(&fft_1024, window_input_1024, output_buffer_1024);
+					#ifdef WINDOW_ENABLE
+						arm_mult_q15(hanning_window_1024, input_buffer_1024, window_input_1024, FFT_SAMPLES_1024);
+						arm_rfft_q15(&fft_1024, window_input_1024, output_buffer_1024);
+
+					#else
+						arm_rfft_q15(&fft_1024, input_buffer_1024, output_buffer_1024);
+					#endif
 
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_1024[i] <<= upscale_bits;
@@ -404,14 +414,18 @@ int main(void)
 			{
 				if (fft_is_active)
 				{
-					arm_mult_q15(hanning_window_2048, input_buffer_2048, window_input_2048, FFT_SAMPLES_2048);
-					arm_rfft_q15(&fft_2048, window_input_2048, output_buffer_2048);
+					#ifdef WINDOW_ENABLE
+						arm_mult_q15(hanning_window_2048, input_buffer_2048, window_input_2048, FFT_SAMPLES_2048);
+						arm_rfft_q15(&fft_2048, window_input_2048, output_buffer_2048);
+					#else
+						arm_rfft_q15(&fft_2048, input_buffer_2048, output_buffer_2048);
+					#endif
 
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_2048[i] <<= upscale_bits;
 				}
 			}
-	
+
 			input_buffer_ptr  = input_start_ptr;
 			output_buffer_ptr = output_start_ptr;
 
