@@ -44,7 +44,7 @@
 #define FFT_SAMPLES_1024 (uint32_t) 1024
 #define FFT_SAMPLES_2048 (uint32_t) 2048
 #define I_FFT_FLAG_R 	 (uint32_t) 0		/* Flag que indica que se hara la Forward FFT*/
-#define BIT_REVERSE_FLAG (uint32_t) 0		/* Flag que indica que no se invertira el orden de salida de los bits de la FFT */
+#define BIT_REVERSE_FLAG (uint32_t) 1		/* Flag que indica que no se invertira el orden de salida de los bits de la FFT */
 
 #define CHANNEL_GROUP 0U
 #define DC_OFFSET (uint16_t) 32767	/* Offset de DC que trae la señal. */
@@ -71,7 +71,7 @@ q15_t output_buffer_2048[FFT_SAMPLES_2048];
 
 /* Punteros que se usan para recorrer los buffers */
 volatile q15_t *input_buffer_ptr, *output_buffer_ptr;
-q15_t *input_start_ptr, *output_start_ptr;	/* Siempre señalan el incio del buffer */
+q15_t *input_start_ptr, *output_start_ptr;	/* Punteros auxiliares que siempre señalan el incio del buffer */
 
 /* Variables para la logica de los buffers */
 volatile uint16_t samples_counter = 0;	/* Variable  que se usa para contar la cantidad de muestras tomadas */
@@ -101,8 +101,8 @@ void GPIOC_IRQHANDLER(void)
 
 	if (fft_is_active)
 	{
-		/* 	Se desactiva el calculo de la fft y se dejan listos los punteros en la posicion 
-			inicial del buff. correspondiente para que cuando se active nuevamente los buffers 
+		/* 	Se desactiva el calculo de la FFT y se dejan listos los punteros en la posicion 
+			inicial del buff. correspondiente, para que cuando se active nuevamente los buffers 
 			se llenen con muestras consecutivas.
 		*/
 
@@ -110,11 +110,15 @@ void GPIOC_IRQHANDLER(void)
 
 		input_buffer_ptr  = input_start_ptr;
 		output_buffer_ptr = output_start_ptr;
-		samples_counter = 0;
+		buffer_is_full = false;
 	}
 	else
+	{
 		fft_is_active = true;
-	
+		samples_counter = 0;
+		buffer_is_full = false;
+	}
+		
 	/* Clear pin flags */
 	GPIO_PortClearInterruptFlags(GPIOC, pin_flags);
 
@@ -255,9 +259,9 @@ int main(void)
 	volatile uint8_t seleccion = 0;
 
     PRINTF("Seleccione la cantidad de muestras de la FFT.\r\n");
-    PRINTF("1: FFT de 512\n");
-    PRINTF("2: FFT de 1024\n");
-    PRINTF("3: FFT de 2048\n");
+    PRINTF("1: FFT de 512\r\n");
+    PRINTF("2: FFT de 1024\r\n");
+    PRINTF("3: FFT de 2048\r\n");
     SCANF("%d",&seleccion);
 
     /* Se establece la configuracion de la FFT correspondiente y componentes asociados */
@@ -329,22 +333,20 @@ int main(void)
 			else
 				DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((input_value_fixed + DC_OFFSET)>>4));
 			
-
 			samples_counter ++;
 			if(samples_counter >= buffer_limit)
 			{
 				samples_counter = 0;
 				buffer_is_full = true;	/* Se avisa que se lleno el buffer */
 			}
-
 		}
 
 		if(buffer_is_full)
 		{
 			buffer_is_full = false;
 
-			/* De acuerdo a la seleccion se calcula la FFT si está activada y se hace la operacion de upscale
-			 * y se vuelven a establecer los punteros.
+			/* De acuerdo a la seleccion, se calcula la FFT si está activada y se hace la operacion de upscale.
+			 * Al final se vuelven a establecer los punteros.
 			 */
 
 			uint32_t primask_value = DisableGlobalIRQ(); /* Desactivo interr. hasta que termine de computar */
@@ -358,9 +360,6 @@ int main(void)
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_512[i] <<= upscale_bits;
 				}
-
-				input_buffer_ptr  = &input_buffer_512[0];
-				output_buffer_ptr = &output_buffer_512[0];
 			}
 			if(seleccion == 2)
 			{
@@ -371,9 +370,6 @@ int main(void)
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_512[i] <<= upscale_bits;
 				}
-
-				input_buffer_ptr  = &input_buffer_1024[0];
-				output_buffer_ptr = &output_buffer_1024[0];
 			}
 			if(seleccion == 3)
 			{
@@ -384,10 +380,10 @@ int main(void)
 					for(uint16_t i = 0; i < buffer_limit; i++)
 						output_buffer_512[i] <<= upscale_bits;
 				}
-
-				input_buffer_ptr  = &input_buffer_2048[0];
-				output_buffer_ptr = &output_buffer_2048[0];
 			}
+	
+			input_buffer_ptr  = input_start_ptr;
+			output_buffer_ptr = output_start_ptr;
 
 			EnableGlobalIRQ(primask_value);	/* Activo las interr. nuevamente */
 		}
