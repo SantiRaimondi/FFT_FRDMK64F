@@ -19,7 +19,8 @@
  *
  *
  * NOTAS:
- *
+ *	No se incluyo la parte de la comunicacion con la PC ya que se visualizó la salida utilizando un osciloscopio
+	digital que incorpora la funcion de FFT y se pudieron comparar las mediciones
  *
  */
 
@@ -45,7 +46,7 @@
 #define FFT_SAMPLES_2048 (uint32_t) 2048
 #define I_FFT_FLAG_R 	 (uint32_t) 0		/* Flag que indica que se hara la Forward FFT*/
 #define BIT_REVERSE_FLAG (uint32_t) 1		/* Flag que indica que no se invertira el orden de salida de los bits de la FFT */
-//#define WINDOW_ENABLE 			/* Flag que activa la aplicacion del filtro de ventana de Hanning*/
+//#define WINDOW_ENABLE 			/* Flag que activa la aplicacion del filtro de ventana de Hanning. Para activarla solo hay que descomentarla  */
 
 #define CHANNEL_GROUP 0U
 #define DC_OFFSET (uint16_t) 32767	/* Offset de DC que trae la señal. */
@@ -74,12 +75,12 @@ q15_t *input_start_ptr, *output_start_ptr;	/* Punteros auxiliares que siempre se
 
 /* Variables para la logica de los buffers */
 volatile uint16_t samples_counter = 0;	/* Variable  que se usa para contar la cantidad de muestras tomadas */
-uint16_t buffer_limit 	= 0;			/* Limite que se asignara al momento de la seleccion de la cantidad de puntos de la FFT */
+uint16_t buffer_size 	= 0;			/* Limite que se asignara al momento de la seleccion de la cantidad de puntos de la FFT */
 bool buffer_is_full = false;	/* Bandera que indica si se lleno el buffer de muestras de entradas para computar la FFT */
 
 /* Instancias de la estructura de configuracion para las distintas FFT */
 arm_rfft_instance_q15 fft_512;
-arm_rfft_instance_q15 fft_1024;
+arm_rfft_instance_q15 fft_1024;		/*SE PUEDE CAMBIAR TODO POR UNA SOLA INSTANCIA QUE SE CONFIGURE SEGUN LA SELECCION*/
 arm_rfft_instance_q15 fft_2048;
 uint8_t upscale_bits = 0;	/* Bits necesarios para volver la salida de la FFT a formato q15 segun la documentacion de */
 
@@ -270,7 +271,7 @@ int main(void)
 		output_buffer_ptr = &output_buffer_512[0];
 		input_start_ptr = &input_buffer_512[0];
 		output_start_ptr = &output_buffer_512[0];
-		buffer_limit = FFT_SAMPLES_512;
+		buffer_size = FFT_SAMPLES_512;
 		upscale_bits = 8;
 		if (arm_rfft_init_q15(&fft_512, FFT_SAMPLES_512, I_FFT_FLAG_R, BIT_REVERSE_FLAG) != ARM_MATH_SUCCESS)
 		{
@@ -284,7 +285,7 @@ int main(void)
 		output_buffer_ptr = &output_buffer_1024[0];
 		input_start_ptr = &input_buffer_1024[0];
 		output_start_ptr = &output_buffer_1024[0];
-		buffer_limit = FFT_SAMPLES_1024;
+		buffer_size = FFT_SAMPLES_1024;
 		upscale_bits = 9;
 		if (arm_rfft_init_q15(&fft_1024, FFT_SAMPLES_1024, I_FFT_FLAG_R, BIT_REVERSE_FLAG) != ARM_MATH_SUCCESS)
 		{
@@ -298,7 +299,7 @@ int main(void)
 		output_buffer_ptr = &output_buffer_2048[0];
 		input_start_ptr = &input_buffer_2048[0];
 		output_start_ptr = &output_buffer_2048[0];
-		buffer_limit = FFT_SAMPLES_2048;
+		buffer_size = FFT_SAMPLES_2048;
 		upscale_bits = 10;
 		if (arm_rfft_init_q15(&fft_2048, FFT_SAMPLES_2048, I_FFT_FLAG_R, BIT_REVERSE_FLAG)!= ARM_MATH_SUCCESS)
 		{
@@ -307,7 +308,7 @@ int main(void)
 		}
 	}
 	/* Se verifica que la seleccion haya sido correcta */
-	if (buffer_limit == 0)
+	if (buffer_size == 0)
 	{
 		PRINTF(" ERROR DE SELECCION. \r\n");
 		PRINTF(" REINICIE LA PLACA E INTENTE NUEVAMENTE. \r\n");
@@ -361,7 +362,7 @@ int main(void)
 				DAC_SetBufferValue(DAC0, DAC_BUFFER_INDEX, ((input_value_fixed + DC_OFFSET)>>4));
 
 			samples_counter ++;
-			if(samples_counter >= buffer_limit)
+			if(samples_counter >= buffer_size)
 			{
 				samples_counter = 0;
 				buffer_is_full = true;	/* Se avisa que se lleno el buffer */
@@ -378,6 +379,33 @@ int main(void)
 
 			uint32_t primask_value = DisableGlobalIRQ(); /* Desactivo interr. hasta que termine de computar */
 
+			/*
+				Se puede cambiar todo esto por una sola instancia de la estructura, que segun la seleccion se incializa
+				con la cant. de muestras que hagan falta => me ahorro los if(seleccion == ...).
+
+				El calculo de la ventana es lo mismo. Hay una sola ventana que se inicializa de tamaño buffer_size.
+				
+				Ej: 
+
+				if (fft_is_active)
+				{
+					#ifdef WINDOW_ENABLE
+						arm_mult_q15(hanning_window, input_buffer_start, window_input, buffer_size);
+						arm_rfft_q15(&fft_instance, window_input, output_buffer_start);
+					#else
+						arm_rfft_q15(&fft_instance, input_buffer_start, output_buffer_start);
+					#endif
+
+					output_buffer_ptr = output_buffer_start;
+
+					for(uint16_t i = 0; i < buffer_size; i++)
+					{
+						*output_buffer_ptr = *output_buffer_ptr << upscale_bits;
+						output_buffer_ptr ++;
+					}
+						
+				}
+			*/
 			if(seleccion == 1)
 			{
 				if (fft_is_active)
@@ -390,7 +418,7 @@ int main(void)
 						arm_rfft_q15(&fft_512, input_buffer_512, output_buffer_512);
 					#endif
 
-					for(uint16_t i = 0; i < buffer_limit; i++)
+					for(uint16_t i = 0; i < buffer_size; i++)
 						output_buffer_512[i] <<= upscale_bits;
 				}
 			}
@@ -406,7 +434,7 @@ int main(void)
 						arm_rfft_q15(&fft_1024, input_buffer_1024, output_buffer_1024);
 					#endif
 
-					for(uint16_t i = 0; i < buffer_limit; i++)
+					for(uint16_t i = 0; i < buffer_size; i++)
 						output_buffer_1024[i] <<= upscale_bits;
 				}
 			}
@@ -421,7 +449,7 @@ int main(void)
 						arm_rfft_q15(&fft_2048, input_buffer_2048, output_buffer_2048);
 					#endif
 
-					for(uint16_t i = 0; i < buffer_limit; i++)
+					for(uint16_t i = 0; i < buffer_size; i++)
 						output_buffer_2048[i] <<= upscale_bits;
 				}
 			}
