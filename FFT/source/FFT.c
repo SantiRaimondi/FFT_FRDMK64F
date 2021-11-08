@@ -20,7 +20,10 @@
  *
  * NOTAS:
  *	No se incluyo la parte de la comunicacion con la PC ya que se visualizó la salida utilizando un osciloscopio
-	digital que incorpora la funcion de FFT y se pudieron comparar las mediciones
+	digital que incorpora la funcion de FFT y se pudieron comparar las mediciones.
+
+	Con la variable de preprocesamiento WINDOW_ENABLE se activa/desactiva el filtrado de las muestras tomadas. Se 
+	utiliza una ventana de Hanning para hacer el filtrado.
  *
  */
 
@@ -46,7 +49,7 @@
 #define FFT_SAMPLES_2048 (uint32_t) 2048
 #define I_FFT_FLAG_R 	 (uint32_t) 0		/* Flag que indica que se hara la Forward FFT*/
 #define BIT_REVERSE_FLAG (uint32_t) 1		/* Flag que indica que no se invertira el orden de salida de los bits de la FFT */
-//#define WINDOW_ENABLE 			/* Flag que activa la aplicacion del filtro de ventana de Hanning. Para activarla solo hay que descomentarla  */
+ #define WINDOW_ENABLE 			/* Flag que activa la aplicacion del filtro de ventana de Hanning. Para activarla solo hay que descomentarla  */
 
 #define CHANNEL_GROUP 0U
 #define DC_OFFSET (uint16_t) 32767	/* Offset de DC que trae la señal. */
@@ -316,13 +319,12 @@ int main(void)
 		PRINTF("Inicializacion correcta, su seleccion: %d", seleccion);
 	}
 
-	/* 	Ventanas de Hannig para suavizar el calculo de la FFT.
+	/* 	Ventanas de Hanning para suavizar el calculo de la FFT.
 		La forumla del calculo la sacamos de internet.
 	*/
-
 	#ifdef WINDOW_ENABLE
-		static q15_t hanning_window[buffer_size];
-		static q15_t window_input[buffer_size];
+		q15_t hanning_window[buffer_size];
+		q15_t window_input[buffer_size];
 
 		for(int i=0; i<buffer_size; i++)
 			hanning_window[i] = (q15_t) (0.5f * 32768.0f * (1.0f - cosf(2.0f*PI*i / buffer_size)));
@@ -364,50 +366,25 @@ int main(void)
 
 			uint32_t primask_value = DisableGlobalIRQ(); /* Desactivo interr. hasta que termine de computar */
 
-			/*
-				Se puede cambiar todo esto por una sola instancia de la estructura, que segun la seleccion se incializa
-				con la cant. de muestras que hagan falta => me ahorro los if(seleccion == ...).
-
-				El calculo de la ventana es lo mismo. Hay una sola ventana que se inicializa de tamaño buffer_size.
-				
-				Ej: 
-
-				if (fft_is_active)
-				{
-					#ifdef WINDOW_ENABLE
-						arm_mult_q15(hanning_window, input_buffer_start, window_input, buffer_size);
-						arm_rfft_q15(&fft_instance, window_input, output_buffer_start);
-					#else
-						arm_rfft_q15(&fft_instance, input_buffer_start, output_buffer_start);
-					#endif
-
-					output_buffer_ptr = output_buffer_start;
-
-					for(uint16_t i = 0; i < buffer_size; i++)
-					{
-						*output_buffer_ptr = *output_buffer_ptr << upscale_bits;
-						output_buffer_ptr ++;
-					}
-						
-				}
-			*/
 			if (fft_is_active)
 			{
 				/* Si esta activado, se aplica el filtro de ventana a la entrada y se computa la FFT sobre la señal filtrada. Si no se computa la FFT sobre la señal de entrada */
 				#ifdef WINDOW_ENABLE
-					arm_mult_q15(hanning_window, input_buffer_start, window_input, buffer_size);
-					arm_rfft_q15(&fft_q15, window_input, output_buffer_start);
+					arm_mult_q15(hanning_window, input_start_ptr, window_input, buffer_size);
+					arm_rfft_q15(&fft_q15, window_input, output_start_ptr);
 				#else
-					arm_rfft_q15(&fft_q15, input_buffer_start, output_buffer_start);
+					arm_rfft_q15(&fft_q15, input_start_ptr, output_start_ptr);
 				#endif
+
+				output_buffer_ptr = output_start_ptr;	/* Volvemos a apuntar al principio para hacer la operacion de upscale */
 
 				for(uint16_t i = 0; i < buffer_size; i++)
 				{
 					*output_buffer_ptr = *output_buffer_ptr << upscale_bits;
 					output_buffer_ptr ++;
-				}			
+				}
 			}
-			
+
 			input_buffer_ptr  = input_start_ptr;
 			output_buffer_ptr = output_start_ptr;
 
