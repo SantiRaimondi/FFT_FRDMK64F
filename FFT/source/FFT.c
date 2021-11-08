@@ -22,7 +22,7 @@
  *	No se incluyo la parte de la comunicacion con la PC ya que se visualizó la salida utilizando un osciloscopio
 	digital que incorpora la funcion de FFT y se pudieron comparar las mediciones.
 
-	Con la variable de preprocesamiento WINDOW_ENABLE se activa/desactiva el filtrado de las muestras tomadas. Se 
+	Con la variable de preprocesamiento WINDOW_ENABLE se activa/desactiva el filtrado de las muestras tomadas. Se
 	utiliza una ventana de Hanning para hacer el filtrado.
  *
  */
@@ -49,7 +49,7 @@
 #define FFT_SAMPLES_2048 (uint32_t) 2048
 #define I_FFT_FLAG_R 	 (uint32_t) 0		/* Flag que indica que se hara la Forward FFT*/
 #define BIT_REVERSE_FLAG (uint32_t) 1		/* Flag que indica que no se invertira el orden de salida de los bits de la FFT */
- #define WINDOW_ENABLE 			/* Flag que activa la aplicacion del filtro de ventana de Hanning. Para activarla solo hay que descomentarla  */
+// #define WINDOW_ENABLE 			/* Flag que activa la aplicacion del filtro de ventana de Hanning. Para activarla solo hay que descomentarla  */
 
 #define CHANNEL_GROUP 0U
 #define DC_OFFSET (uint16_t) 32767	/* Offset de DC que trae la señal. */
@@ -81,6 +81,7 @@ volatile uint16_t samples_counter = 0;	/* Variable  que se usa para contar la ca
 uint16_t buffer_size 	= 0;			/* Limite que se asignara al momento de la seleccion de la cantidad de puntos de la FFT */
 bool buffer_is_full = false;	/* Bandera que indica si se lleno el buffer de muestras de entradas para computar la FFT */
 
+/* Parametros configurables para la FFT */
 arm_rfft_instance_q15 fft_q15;	/* Instancia de la estructura de configuracion para las distintas FFT */
 uint8_t upscale_bits = 0;		/* Bits necesarios para volver la salida de la FFT a formato q15 segun la documentacion de */
 
