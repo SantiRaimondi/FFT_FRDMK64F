@@ -37,8 +37,8 @@ The program asks the user to configure (via terminal) the number of points of th
 512, 1024 and 2048 samples available) and based on the selection, pointers are assigned to
 the corresponding buffers and the limits are configured to then go through them.
 
-During the execution of the program, every time there is a new sample of the ADC, the * input_buffer_ptr * will be used
-to save the sample in the corresponding buffer. If the FFT calculation is active, what has been saved in the output buffer will be output by the DAC, pointed to by the * buffer_output_ptr * pointer. If the FFT is not activated, the last sample taken by the ADC will be output by the DAC.
+During the execution of the program, every time there is a new sample of the ADC, the *input_buffer_ptr* will be used
+to save the sample in the corresponding buffer. If the FFT calculation is active, what has been saved in the output buffer will be output by the DAC, pointed to by the *buffer_output_ptr* pointer. If the FFT is not activated, the last sample taken by the ADC will be output by the DAC.
 
 Once the input buffer is full, the FFT is computed and the upscaling operation indicated in the [CMSIS official documentation] (https://arm-software.github.io/CMSIS_5/DSP/html/group__RealFFT.html) is performed, taking into account the number of points of the FFT.
 
